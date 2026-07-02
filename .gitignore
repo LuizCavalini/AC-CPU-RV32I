@@ -1,0 +1,10 @@
+# GHDL
+*.o
+*.cf
+work-obj*.cf
+*.ghw
+*.vcd
+# Digital
+*.dig.bak
+# Simulation results
+sim/waves/
