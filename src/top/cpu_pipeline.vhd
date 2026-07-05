@@ -18,7 +18,12 @@ entity cpu_pipeline is
     dmem_wdata_o : out std_logic_vector(31 downto 0);
     dmem_rdata_i : in  std_logic_vector(31 downto 0);
     dmem_we_o    : out std_logic;
-    dmem_re_o    : out std_logic
+    dmem_re_o    : out std_logic;
+    pc_debug_o    : out std_logic_vector(31 downto 0);
+    instr_debug_o : out std_logic_vector(31 downto 0);
+    alu_debug_o   : out std_logic_vector(31 downto 0);
+    stall_debug_o : out std_logic;
+    flush_debug_o : out std_logic
   );
 end entity cpu_pipeline;
 
@@ -75,6 +80,7 @@ architecture rtl of cpu_pipeline is
   signal jalr_ex_s       : std_logic;
   signal auipc_ex_s      : std_logic;
   signal flush_idex_s    : std_logic;
+  signal flush_idex_haz_s : std_logic;
 
   -- ── EX stage signals ────────────────────────────────────────────
   signal alu_a_ex_s      : std_logic_vector(31 downto 0);
@@ -188,8 +194,14 @@ begin
       mem_re_ex_i  => mem_re_ex_s, rd_ex_i      => rd_ex_s,
       rs1_id_i     => rs1_id_s,    rs2_id_i     => rs2_id_s,
       stall_pc_o   => stall_pc_s,  stall_ifid_o => stall_ifid_s,
-      flush_idex_o => flush_idex_s
+      flush_idex_o => flush_idex_haz_s
     );
+
+  -- ID/EX must be flushed both on load-use hazard (flush_idex_haz_s)
+  -- and on a taken branch/jump (pc_redirect_s) — otherwise the
+  -- wrong-path instruction that has already advanced to ID/EX in the
+  -- same cycle the redirect fires escapes the squash and executes.
+  flush_idex_s <= flush_idex_haz_s or pc_redirect_s;
 
   -- ══════════════════════════════════════════════════════════════
   -- ID/EX PIPELINE REGISTER
@@ -303,5 +315,14 @@ begin
     mem_data_wb_s   when "01",
     pc_plus4_wb_s   when "10",
     (others => '0') when others;
+
+  -- ══════════════════════════════════════════════════════════════
+  -- DEBUG OUTPUTS
+  -- ══════════════════════════════════════════════════════════════
+  pc_debug_o    <= pc_if_s;
+  instr_debug_o <= instr_id_s;
+  alu_debug_o   <= alu_result_ex_s;
+  stall_debug_o <= stall_pc_s;
+  flush_debug_o <= pc_redirect_s;
 
 end architecture rtl;
