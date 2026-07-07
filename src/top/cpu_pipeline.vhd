@@ -23,7 +23,8 @@ entity cpu_pipeline is
     instr_debug_o : out std_logic_vector(31 downto 0);
     alu_debug_o   : out std_logic_vector(31 downto 0);
     stall_debug_o : out std_logic;
-    flush_debug_o : out std_logic
+    flush_debug_o : out std_logic;
+    vec_cout_debug_o : out std_logic_vector(7 downto 0)
   );
 end entity cpu_pipeline;
 
@@ -57,6 +58,8 @@ architecture rtl of cpu_pipeline is
   signal rd1_id_s        : std_logic_vector(31 downto 0);
   signal rd2_id_s        : std_logic_vector(31 downto 0);
   signal auipc_id_s      : std_logic;
+  signal is_vector_id_s   : std_logic;
+  signal vecsize_id_s     : std_logic_vector(1 downto 0);
   signal stall_ifid_s    : std_logic;
   signal flush_ifid_s    : std_logic;
 
@@ -79,6 +82,11 @@ architecture rtl of cpu_pipeline is
   signal jump_ex_s       : std_logic;
   signal jalr_ex_s       : std_logic;
   signal auipc_ex_s      : std_logic;
+  signal is_vector_ex_s   : std_logic;
+  signal vecsize_ex_s     : std_logic_vector(1 downto 0);
+  signal vec_alu_result_s : std_logic_vector(31 downto 0);
+  signal alu_result_muxed_s : std_logic_vector(31 downto 0);
+  signal vec_cout_debug_s : std_logic_vector(7 downto 0);
   signal flush_idex_s    : std_logic;
   signal flush_idex_haz_s : std_logic;
 
@@ -178,7 +186,8 @@ begin
       alu_ctrl_o => alu_ctrl_id_s, mem_we_o   => mem_we_id_s,
       mem_re_o   => mem_re_id_s,  wb_sel_o   => wb_sel_id_s,
       branch_o   => branch_id_s,  jump_o     => jump_id_s,
-      jalr_o     => jalr_id_s,    imm_o      => imm_id_s
+      jalr_o     => jalr_id_s,    imm_o      => imm_id_s,
+      is_vector_o => is_vector_id_s, vecsize_o => vecsize_id_s
     );
 
   rf: entity work.regfile
@@ -217,6 +226,7 @@ begin
       rd1_i => rd1_id_s, rd2_i => rd2_id_s, imm_i => imm_id_s,
       rs1_i => rs1_id_s, rs2_i => rs2_id_s, rd_i => rd_id_s,
       funct3_i => funct3_id_s, auipc_i => auipc_id_s,
+      is_vector_i => is_vector_id_s, vecsize_i => vecsize_id_s,
       reg_we_o => reg_we_ex_s, alu_src_o => alu_src_ex_s,
       alu_ctrl_o => alu_ctrl_ex_s, mem_we_o => mem_we_ex_s,
       mem_re_o => mem_re_ex_s, wb_sel_o => wb_sel_ex_s,
@@ -224,7 +234,8 @@ begin
       jalr_o => jalr_ex_s, pc_o => pc_ex_s,
       rd1_o => rd1_ex_s, rd2_o => rd2_ex_s, imm_o => imm_ex_s,
       rs1_o => rs1_ex_s, rs2_o => rs2_ex_s, rd_o => rd_ex_s,
-      funct3_o => funct3_ex_s, auipc_o => auipc_ex_s
+      funct3_o => funct3_ex_s, auipc_o => auipc_ex_s,
+      is_vector_o => is_vector_ex_s, vecsize_o => vecsize_ex_s
     );
 
   -- ══════════════════════════════════════════════════════════════
@@ -269,6 +280,23 @@ begin
       zero_o     => alu_zero_ex_s
     );
 
+  vec_alu_inst: entity work.vec_alu
+    port map(
+      a_i          => alu_a_muxed_s,
+      b_i          => alu_b_muxed_s,
+      alu_ctrl_i   => alu_ctrl_ex_s,
+      vecsize_i    => vecsize_ex_s,
+      s_o          => vec_alu_result_s,
+      cout_debug_o => vec_cout_debug_s
+    );
+
+  -- Seleciona entre resultado escalar e vetorial antes de entrar no
+  -- registrador EX/MEM — o forwarding e o writeback já operam sobre
+  -- esse valor combinado, sem precisar de mudança na forwarding_unit
+  -- nem na hazard_unit.
+  alu_result_muxed_s <= vec_alu_result_s when is_vector_ex_s = '1'
+                        else alu_result_ex_s;
+
   -- ══════════════════════════════════════════════════════════════
   -- EX/MEM PIPELINE REGISTER
   -- ══════════════════════════════════════════════════════════════
@@ -277,7 +305,7 @@ begin
       clk_i => clk_i, rst_i => rst_i,
       reg_we_i => reg_we_ex_s, mem_we_i => mem_we_ex_s,
       mem_re_i => mem_re_ex_s, wb_sel_i => wb_sel_ex_s,
-      alu_result_i => alu_result_ex_s, rd2_i => alu_b_ex_s,
+      alu_result_i => alu_result_muxed_s, rd2_i => alu_b_ex_s,
       rd_i => rd_ex_s, pc_plus4_i => pc_plus4_ex_s,
       reg_we_o => reg_we_mem_s, mem_we_o => mem_we_mem_s,
       mem_re_o => mem_re_mem_s, wb_sel_o => wb_sel_mem_s,
@@ -321,8 +349,9 @@ begin
   -- ══════════════════════════════════════════════════════════════
   pc_debug_o    <= pc_if_s;
   instr_debug_o <= instr_id_s;
-  alu_debug_o   <= alu_result_ex_s;
+  alu_debug_o   <= alu_result_muxed_s;
   stall_debug_o <= stall_pc_s;
   flush_debug_o <= pc_redirect_s;
+  vec_cout_debug_o <= vec_cout_debug_s;
 
 end architecture rtl;
