@@ -29,7 +29,10 @@ entity decoder is
     jump_o      : out std_logic;       -- jal/jalr
     jalr_o      : out std_logic;       -- jalr uses rs1+imm (not PC+imm)
     -- Immediate value (sign extended)
-    imm_o       : out std_logic_vector(31 downto 0)
+    imm_o       : out std_logic_vector(31 downto 0);
+    -- Vector control (Parte 2)
+    is_vector_o : out std_logic;
+    vecsize_o   : out std_logic_vector(1 downto 0)
   );
 end entity decoder;
 
@@ -81,6 +84,8 @@ begin
     jump_o     <= '0';
     jalr_o     <= '0';
     imm_o      <= (others => '0');
+    is_vector_o <= '0';
+    vecsize_o   <= "00";
 
     case opcode is
 
@@ -178,6 +183,56 @@ begin
         alu_src_o <= '1';
         wb_sel_o  <= "10";   -- write back PC+4
         imm_o     <= imm_i_s;
+
+      -- ── Custom-0: instruções vetoriais (Parte 2 — extensão vetorial) ──
+      -- Reaproveita os códigos alu_ctrl já existentes (0000=ADD, 0001=SUB,
+      -- 0101=SLL, 0110=SRL). funct3 (instr[14:12]) seleciona a operação
+      -- vetorial uniformemente, mesmo para vauipc (que no U-type padrão
+      -- não tem esse campo — aqui é reaproveitado por uniformidade,
+      -- custando parte do imediato do vauipc).
+      when "0001011" =>
+        reg_we_o    <= '1';
+        is_vector_o <= '1';
+        wb_sel_o    <= "00";
+        case funct3 is
+          when "000" =>  -- vadd (R-type-like)
+            alu_ctrl_o <= "0000";
+            alu_src_o  <= '0';
+            vecsize_o  <= instr_i(26 downto 25);
+          when "001" =>  -- vaddi (I-type-like, imm reduzido a 10 bits)
+            alu_ctrl_o <= "0000";
+            alu_src_o  <= '1';
+            vecsize_o  <= instr_i(31 downto 30);
+            imm_o      <= (31 downto 10 => instr_i(29)) & instr_i(29 downto 20);
+          when "010" =>  -- vauipc (U-type-like, imm reduzido a 15 bits)
+            alu_ctrl_o <= "0000";
+            alu_src_o  <= '1';
+            vecsize_o  <= instr_i(31 downto 30);
+            imm_o      <= (31 downto 27 => '0') & instr_i(29 downto 15) & (11 downto 0 => '0');
+          when "011" =>  -- vsub (R-type-like)
+            alu_ctrl_o <= "0001";
+            alu_src_o  <= '0';
+            vecsize_o  <= instr_i(26 downto 25);
+          when "100" =>  -- vsll (R-type-like, shamt = rs2[4:0])
+            alu_ctrl_o <= "0101";
+            alu_src_o  <= '0';
+            vecsize_o  <= instr_i(26 downto 25);
+          when "101" =>  -- vslli (I-type-like, shamt = imm[4:0])
+            alu_ctrl_o <= "0101";
+            alu_src_o  <= '1';
+            vecsize_o  <= instr_i(26 downto 25);
+            imm_o      <= (31 downto 5 => '0') & instr_i(24 downto 20);
+          when "110" =>  -- vsrl (R-type-like, shamt = rs2[4:0])
+            alu_ctrl_o <= "0110";
+            alu_src_o  <= '0';
+            vecsize_o  <= instr_i(26 downto 25);
+          when "111" =>  -- vsrli (I-type-like, shamt = imm[4:0])
+            alu_ctrl_o <= "0110";
+            alu_src_o  <= '1';
+            vecsize_o  <= instr_i(26 downto 25);
+            imm_o      <= (31 downto 5 => '0') & instr_i(24 downto 20);
+          when others => null;
+        end case;
 
       when others => null;
     end case;

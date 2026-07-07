@@ -16,13 +16,16 @@ architecture sim of decoder_tb is
   signal jump     : std_logic;
   signal jalr     : std_logic;
   signal imm      : std_logic_vector(31 downto 0);
+  signal is_vector: std_logic;
+  signal vecsize  : std_logic_vector(1 downto 0);
 begin
 
   uut: entity work.decoder
     port map(instr_i=>instr, reg_we_o=>reg_we, alu_src_o=>alu_src,
              alu_ctrl_o=>alu_ctrl, mem_we_o=>mem_we, mem_re_o=>mem_re,
              wb_sel_o=>wb_sel, branch_o=>branch, jump_o=>jump,
-             jalr_o=>jalr, imm_o=>imm);
+             jalr_o=>jalr, imm_o=>imm,
+             is_vector_o=>is_vector, vecsize_o=>vecsize);
 
   process
   begin
@@ -34,6 +37,9 @@ begin
     assert alu_ctrl = "0000" report "FALHOU: ADD alu_ctrl" severity error;
     assert branch   = '0'    report "FALHOU: ADD branch"   severity error;
     assert jump     = '0'    report "FALHOU: ADD jump"     severity error;
+    -- Regressão: instrução escalar não deve acionar sinais vetoriais
+    assert is_vector = '0'   report "FALHOU: ADD is_vector" severity error;
+    assert vecsize   = "00"  report "FALHOU: ADD vecsize"   severity error;
 
     -- SUB x1, x2, x3  (R-type: funct7=0100000, funct3=000)
     -- 0100000 00011 00010 000 00001 0110011
@@ -81,6 +87,75 @@ begin
     instr <= "00000000000000000000000011101111"; wait for 10 ns;
     assert jump     = '1'    report "FALHOU: JAL jump"   severity error;
     assert wb_sel   = "10"   report "FALHOU: JAL wb_sel" severity error;
+
+    -- ── Custom-0: instruções vetoriais (Parte 2) ──────────────────
+    -- VADD, vecsize="01" (opcode=0001011, funct3=000)
+    instr <= x"0231008B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VADD is_vector" severity error;
+    assert alu_ctrl  = "0000" report "FALHOU: VADD alu_ctrl"  severity error;
+    assert alu_src   = '0'    report "FALHOU: VADD alu_src"   severity error;
+    assert vecsize   = "01"   report "FALHOU: VADD vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VADD reg_we"    severity error;
+
+    -- VADDI, vecsize="10" (opcode=0001011, funct3=001)
+    instr <= x"8052920B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VADDI is_vector" severity error;
+    assert alu_ctrl  = "0000" report "FALHOU: VADDI alu_ctrl"  severity error;
+    assert alu_src   = '1'    report "FALHOU: VADDI alu_src"   severity error;
+    assert vecsize   = "10"   report "FALHOU: VADDI vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VADDI reg_we"    severity error;
+    assert imm       = x"00000005" report "FALHOU: VADDI imm" severity error;
+
+    -- VAUIPC, vecsize="11" (opcode=0001011, funct3=010)
+    instr <= x"C015230B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VAUIPC is_vector" severity error;
+    assert alu_ctrl  = "0000" report "FALHOU: VAUIPC alu_ctrl"  severity error;
+    assert alu_src   = '1'    report "FALHOU: VAUIPC alu_src"   severity error;
+    assert vecsize   = "11"   report "FALHOU: VAUIPC vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VAUIPC reg_we"    severity error;
+    assert imm       = x"0002A000" report "FALHOU: VAUIPC imm" severity error;
+
+    -- VSUB, vecsize="00" (opcode=0001011, funct3=011)
+    instr <= x"0094338B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VSUB is_vector" severity error;
+    assert alu_ctrl  = "0001" report "FALHOU: VSUB alu_ctrl"  severity error;
+    assert alu_src   = '0'    report "FALHOU: VSUB alu_src"   severity error;
+    assert vecsize   = "00"   report "FALHOU: VSUB vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VSUB reg_we"    severity error;
+
+    -- VSLL, vecsize="01" (opcode=0001011, funct3=100)
+    instr <= x"02C5C50B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VSLL is_vector" severity error;
+    assert alu_ctrl  = "0101" report "FALHOU: VSLL alu_ctrl"  severity error;
+    assert alu_src   = '0'    report "FALHOU: VSLL alu_src"   severity error;
+    assert vecsize   = "01"   report "FALHOU: VSLL vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VSLL reg_we"    severity error;
+
+    -- VSLLI, vecsize="10" (opcode=0001011, funct3=101)
+    instr <= x"0437568B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VSLLI is_vector" severity error;
+    assert alu_ctrl  = "0101" report "FALHOU: VSLLI alu_ctrl"  severity error;
+    assert alu_src   = '1'    report "FALHOU: VSLLI alu_src"   severity error;
+    assert vecsize   = "10"   report "FALHOU: VSLLI vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VSLLI reg_we"    severity error;
+    assert imm       = x"00000003" report "FALHOU: VSLLI imm" severity error;
+
+    -- VSRL, vecsize="11" (opcode=0001011, funct3=110)
+    instr <= x"0718678B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VSRL is_vector" severity error;
+    assert alu_ctrl  = "0110" report "FALHOU: VSRL alu_ctrl"  severity error;
+    assert alu_src   = '0'    report "FALHOU: VSRL alu_src"   severity error;
+    assert vecsize   = "11"   report "FALHOU: VSRL vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VSRL reg_we"    severity error;
+
+    -- VSRLI, vecsize="00" (opcode=0001011, funct3=111)
+    instr <= x"0079F90B"; wait for 10 ns;
+    assert is_vector = '1'    report "FALHOU: VSRLI is_vector" severity error;
+    assert alu_ctrl  = "0110" report "FALHOU: VSRLI alu_ctrl"  severity error;
+    assert alu_src   = '1'    report "FALHOU: VSRLI alu_src"   severity error;
+    assert vecsize   = "00"   report "FALHOU: VSRLI vecsize"   severity error;
+    assert reg_we    = '1'    report "FALHOU: VSRLI reg_we"    severity error;
+    assert imm       = x"00000007" report "FALHOU: VSRLI imm" severity error;
 
     report "Decoder: todos os testes passaram!" severity note;
     wait;
