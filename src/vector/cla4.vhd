@@ -21,7 +21,14 @@ architecture rtl of cla4 is
   signal c : std_logic_vector(4 downto 0);
 begin
   b_eff <= b_i xor (sub_i & sub_i & sub_i & sub_i);
-  c(0) <= cin_i or sub_i;
+  -- Contrato: para subtracao correta em complemento de dois,
+  -- quem instancia este bloco deve fornecer cin_i = sub_i quando
+  -- este for o bloco inicial de uma cadeia de subtracao (injeta o
+  -- "+1"); blocos subsequentes numa cadeia devem receber o carry/
+  -- borrow real do bloco anterior, nao sub_i de novo (repassar
+  -- sub_i em todo bloco quebra subtracoes encadeadas com mais de
+  -- um bloco — ver vec_adder.vhd para o padrao correto de cadeia).
+  c(0) <= cin_i;
   g(0) <= a_i(0) and b_eff(0);
   g(1) <= a_i(1) and b_eff(1);
   g(2) <= a_i(2) and b_eff(2);

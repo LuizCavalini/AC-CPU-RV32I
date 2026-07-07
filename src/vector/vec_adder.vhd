@@ -58,17 +58,21 @@ begin
   cout_debug_o <= cout;
 
   -- ── Carries de entrada de cada bloco ─────────────────────────
-  -- Bloco 0: cin vem de fora (sempre 0 pois não há cin externo)
-  cin(0) <= '0';
-
-  -- Blocos 1..7: carry do bloco anterior, bloqueado pela máscara
-  cin(1) <= cout(0) and mask(0);
-  cin(2) <= cout(1) and mask(1);
-  cin(3) <= cout(2) and mask(2);
-  cin(4) <= cout(3) and mask(3);
-  cin(5) <= cout(4) and mask(4);
-  cin(6) <= cout(5) and mask(5);
-  cin(7) <= cout(6) and mask(6);
+  -- cin(0) sempre inicia a lane 0; nas demais posicoes, se o limite
+  -- anterior estiver mascarado (lane nova comecando ali), injeta o
+  -- "+1" do complemento de dois (mode_i) em vez de repassar carry
+  -- real (que nao existe entre lanes independentes). Se o limite
+  -- estiver aberto (mesma lane continuando), repassa o carry real
+  -- sem forcar nada — corrige um bug onde a subtracao perdia borrow
+  -- real no meio de uma lane com mais de 1 bloco de 4 bits.
+  cin(0) <= mode_i;
+  cin(1) <= (cout(0) and mask(0)) or (mode_i and not mask(0));
+  cin(2) <= (cout(1) and mask(1)) or (mode_i and not mask(1));
+  cin(3) <= (cout(2) and mask(2)) or (mode_i and not mask(2));
+  cin(4) <= (cout(3) and mask(3)) or (mode_i and not mask(3));
+  cin(5) <= (cout(4) and mask(4)) or (mode_i and not mask(4));
+  cin(6) <= (cout(5) and mask(5)) or (mode_i and not mask(5));
+  cin(7) <= (cout(6) and mask(6)) or (mode_i and not mask(6));
 
   -- ── 8 instâncias do CLA4 ─────────────────────────────────────
   blk0: entity work.cla4

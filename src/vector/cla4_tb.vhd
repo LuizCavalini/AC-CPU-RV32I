@@ -25,7 +25,7 @@ begin
     assert s = "1000" and cout = '0' report "FALHOU: 7+1" severity error;
     a <= "1111"; b <= "0001"; wait for 10 ns;
     assert s = "0000" and cout = '1' report "FALHOU: 15+1" severity error;
-    sub <= '1'; cin <= '0';
+    sub <= '1'; cin <= '1';
     a <= "0111"; b <= "0011"; wait for 10 ns;
     assert s = "0100" report "FALHOU: 7-3" severity error;
     a <= "0101"; b <= "0101"; wait for 10 ns;
