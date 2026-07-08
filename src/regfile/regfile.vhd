@@ -36,8 +36,10 @@ begin
 
   -- Asynchronous read (x0 always returns zero)
   rd1_o <= (others => '0') when rs1_i = "00000" else
+           wd_i when (we_i = '1' and rd_i = rs1_i) else
            regs(to_integer(unsigned(rs1_i)));
   rd2_o <= (others => '0') when rs2_i = "00000" else
+           wd_i when (we_i = '1' and rd_i = rs2_i) else
            regs(to_integer(unsigned(rs2_i)));
 
 end architecture rtl;

@@ -28,6 +28,8 @@ entity id_ex_reg is
     rd_i       : in  std_logic_vector(4 downto 0);
     funct3_i   : in  std_logic_vector(2 downto 0);
     auipc_i    : in  std_logic;
+    is_vector_i : in  std_logic;
+    vecsize_i   : in  std_logic_vector(1 downto 0);
     -- Outputs
     reg_we_o   : out std_logic;
     alu_src_o  : out std_logic;
@@ -46,7 +48,9 @@ entity id_ex_reg is
     rs2_o      : out std_logic_vector(4 downto 0);
     rd_o       : out std_logic_vector(4 downto 0);
     funct3_o   : out std_logic_vector(2 downto 0);
-    auipc_o    : out std_logic
+    auipc_o    : out std_logic;
+    is_vector_o : out std_logic;
+    vecsize_o   : out std_logic_vector(1 downto 0)
   );
 end entity id_ex_reg;
 
@@ -64,6 +68,7 @@ begin
         rs1_o      <= (others => '0'); rs2_o <= (others => '0');
         rd_o       <= (others => '0'); funct3_o <= (others => '0');
         auipc_o    <= '0';
+        is_vector_o <= '0'; vecsize_o <= "00";
       else
         reg_we_o   <= reg_we_i;  alu_src_o  <= alu_src_i;
         alu_ctrl_o <= alu_ctrl_i; mem_we_o   <= mem_we_i;
@@ -74,6 +79,7 @@ begin
         imm_o      <= imm_i;     rs1_o      <= rs1_i;
         rs2_o      <= rs2_i;     rd_o       <= rd_i;
         funct3_o   <= funct3_i;  auipc_o    <= auipc_i;
+        is_vector_o <= is_vector_i; vecsize_o <= vecsize_i;
       end if;
     end if;
   end process;
