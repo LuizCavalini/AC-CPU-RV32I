@@ -1,0 +1,913 @@
+% ============================================================
+% Relatório CPU RV32I Pipeline — Arquitetura de Computadores — UFRJ
+% Compilar no Overleaf com pdflatex
+% Upload: este .tex + ufrj_logo_1.jpeg, ufrj_logo_2.png
+% ============================================================
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0pt}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small CPU RV32I}
+\fancyhead[R]{\small Arquitetura de Computadores}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{font=small, labelfont=bf, justification=centering}
+
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[table,xcdraw]{xcolor}
+\definecolor{headerblue}{RGB}{31,78,121}
+\definecolor{rowalt}{RGB}{238,243,248}
+
+\usepackage{listings}
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codecomment}{RGB}{100,100,100}
+\definecolor{codekey}{RGB}{31,78,121}
+
+\lstdefinestyle{vhdlstyle}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{codekey}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  language=VHDL, frame=single, framerule=0.4pt,
+  rulecolor=\color{gray!40}, breaklines=true,
+  numbers=left, numberstyle=\tiny\color{gray},
+  numbersep=8pt, showstringspaces=false,
+  tabsize=2, xleftmargin=1em,
+  literate={ã}{{\~{a}}}1 {õ}{{\~{o}}}1 {ç}{{\c{c}}}1
+           {á}{{\'a}}1  {é}{{\'e}}1   {í}{{\'i}}1
+           {ó}{{\'o}}1  {ú}{{\'u}}1   {â}{{\^a}}1
+           {ê}{{\^e}}1  {à}{{\`a}}1
+}
+
+\usepackage[colorlinks=true, linkcolor=headerblue, urlcolor=headerblue]{hyperref}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta}
+
+\titleformat{\section}{\large\bfseries\color{headerblue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{headerblue!80}}{\thesubsection}{1em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\reg}[1]{\texttt{x#1}}
+
+\begin{document}
+\pagenumbering{gobble}
+
+% ── CAPA ─────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \begin{minipage}{0.35\textwidth}
+    \centering
+    \includegraphics[height=3.2cm]{ufrj_logo_1.jpeg}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.58\textwidth}
+    \centering
+    \includegraphics[height=3.2cm]{ufrj_logo_2.png}
+  \end{minipage}
+
+  \vspace{3.0cm}
+  {\LARGE\bfseries Arquitetura de Computadores\\[0.6em]}
+  {\Huge\bfseries\color{headerblue} CPU RV32I\\[0.8em]}
+  \vspace{0.4cm}
+  {\large Projeto e implementa\c{c}\~{a}o de uma CPU RISC-V de 32 bits\\[0.2em]
+  com pipeline de 5 est\'{a}gios em VHDL\\[0.2em]
+  com forwarding, detec\c{c}\~{a}o de hazards e flush de controle}
+
+  \vspace{3.0cm}
+  \begin{tabular}{rl}
+    \textbf{Alunos:}      & Luiz Cavalini, Eduardo Viana, Henrique Kezen \\
+                          & e Rafael Maur\'{i}cio \\[0.5em]
+    \textbf{Reposit\'{o}rio:} & \url{https://github.com/LuizCavalini/AC-CPU-RV32I} \\[0.5em]
+    \textbf{Ferramenta:}  & Digital (Neemann) + GHDL \\
+  \end{tabular}
+  \vfill
+  {\large Rio de Janeiro, \today}
+\end{titlepage}
+
+\pagenumbering{roman}
+\pagestyle{plain}
+\begingroup
+  \setlength{\parskip}{0pt}
+  \renewcommand{\baselinestretch}{0.95}\normalfont
+  \tableofcontents
+\endgroup
+\newpage
+\listoffigures
+\newpage
+\pagenumbering{arabic}
+\pagestyle{fancy}
+
+% ============================================================
+\section{Introdu\c{c}\~{a}o}
+
+Este relat\'{o}rio descreve o projeto e a implementa\c{c}\~{a}o de uma CPU RISC-V de
+32 bits (RV32I) com pipeline de 5 est\'{a}gios em VHDL. O objetivo \'{e} construir
+um processador funcional que execute o subconjunto de instru\c{c}\~{o}es inteiras
+do ISA RISC-V sem modo supervisor, usando pipeline para maximizar o throughput.
+
+A CPU implementa as seguintes instru\c{c}\~{o}es:
+
+\begin{table}[H]
+  \centering
+  \caption{Instru\c{c}\~{o}es implementadas por categoria}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{ll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Categoria} & \color{white}\textbf{Instru\c{c}\~{o}es} \\
+    \midrule
+    Aritm\'{e}tica   & \code{add, addi, auipc, sub} \\
+    L\'{o}gica       & \code{and, andi, or, ori, xor, xori} \\
+    Deslocamento     & \code{sll, slli, srl, srli} \\
+    Mem\'{o}ria      & \code{lw, lui, sw} \\
+    Salto/Desvio     & \code{jal, jalr, beq, bne} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ============================================================
+\section{Arquitetura do Pipeline}
+
+\subsection{Vis\~{a}o geral dos 5 est\'{a}gios}
+
+A CPU \'{e} organizada em cinco est\'{a}gios cl\'{a}ssicos separados por registradores
+de pipeline:
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{IF (Instruction Fetch):} O PC endere\c{c}a a mem\'{o}ria de
+    instru\c{c}\~{o}es e a instru\c{c}\~{a}o \'{e} carregada no registrador IF/ID.
+  \item \textbf{ID (Instruction Decode):} A instru\c{c}\~{a}o \'{e} decodificada,
+    os operandos s\~{a}o lidos do banco de registradores e o imediato \'{e}
+    gerado por extens\~{a}o de sinal.
+  \item \textbf{EX (Execute):} A ALU executa a opera\c{c}\~{a}o. A Forwarding Unit
+    seleciona os operandos corretos. Branches e jumps calculam seus alvos.
+  \item \textbf{MEM (Memory Access):} \code{lw} l\^{e} e \code{sw} escreve na
+    mem\'{o}ria de dados.
+  \item \textbf{WB (Write Back):} O resultado final \'{e} escrito no banco de
+    registradores.
+\end{enumerate}
+
+\subsection{Diagrama de blocos}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+    stage/.style={draw, rectangle, minimum width=1.5cm, minimum height=1.0cm,
+                  fill=blue!10, font=\small\bfseries},
+    reg/.style={draw, rectangle, minimum width=0.45cm, minimum height=1.2cm,
+                fill=gray!20, font=\tiny, inner sep=2pt},
+    arr/.style={->, >=Stealth, thick},
+    fwdarr/.style={->, >=Stealth, dashed, thick, color=teal!70},
+    hazarr/.style={->, >=Stealth, dashed, thick, color=red!60},
+  ]
+    % ── Estágios e registradores (linha principal) ──────────────
+    \node[stage] (IF)  at (0,0)   {IF};
+    \node[reg]   (r1)  at (1.1,0) {\rotatebox{90}{\tiny IF/ID}};
+    \node[stage] (ID)  at (2.2,0) {ID};
+    \node[reg]   (r2)  at (3.3,0) {\rotatebox{90}{\tiny ID/EX}};
+    \node[stage] (EX)  at (4.4,0) {EX};
+    \node[reg]   (r3)  at (5.5,0) {\rotatebox{90}{\tiny EX/MEM}};
+    \node[stage] (MEM) at (6.6,0) {MEM};
+    \node[reg]   (r4)  at (7.7,0) {\rotatebox{90}{\tiny MEM/WB}};
+    \node[stage] (WB)  at (8.8,0) {WB};
+
+    % Setas da linha principal
+    \foreach \a/\b in {IF/r1,r1/ID,ID/r2,r2/EX,EX/r3,r3/MEM,MEM/r4,r4/WB}
+      \draw[arr] (\a) -- (\b);
+
+    % ── Forwarding (abaixo do pipeline) ─────────────────────────
+    % EX/MEM -> EX: ponto de saída = centro-baixo de r3, alvo = centro-baixo de EX
+    \draw[fwdarr]
+      (5.5,-0.6) -- (5.5,-1.6) -- (4.4,-1.6) -- (4.4,-0.5);
+    \node[font=\tiny, color=teal!60] at (4.95,-1.85) {EX/MEM $\to$ EX};
+
+    % MEM/WB -> EX: ponto de saída = centro-baixo de r4, alvo = EX mais abaixo
+    \draw[fwdarr]
+      (7.7,-0.6) -- (7.7,-2.4) -- (4.4,-2.4) -- (4.4,-0.5);
+    \node[font=\tiny, color=teal!60] at (6.05,-2.65) {MEM/WB $\to$ EX};
+
+    % ── Hazard / controle (acima do pipeline) ───────────────────
+    % stall/flush: de ID/EX sobe, vai para a esquerda até IF/ID
+    \draw[hazarr]
+      (3.3,0.6) -- (3.3,1.4) -- (1.1,1.4) -- (1.1,0.6);
+    \node[font=\tiny, color=red!60] at (2.2,1.6) {stall / flush};
+
+    % PC redirect: de EX sobe, vai para a esquerda até IF
+    \draw[hazarr]
+      (4.4,0.5) -- (4.4,2.2) -- (0,2.2) -- (0,0.5);
+    \node[font=\tiny, color=red!60] at (2.2,2.4) {PC redirect (branch/jump)};
+
+  \end{tikzpicture}
+  \caption{Pipeline de 5 est\'{a}gios com forwarding e detec\c{c}\~{a}o de hazards}
+  \label{fig:pipeline}
+\end{figure}
+
+% ============================================================
+\section{M\'{o}dulos VHDL}
+
+\subsection{ALU (\code{src/alu/alu.vhd})}
+
+A ALU de 32 bits recebe dois operandos e um seletor de opera\c{c}\~{a}o de 4 bits:
+
+\begin{table}[H]
+  \centering
+  \caption{Opera\c{c}\~{o}es da ALU}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{cll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{alu\_ctrl} & \color{white}\textbf{Opera\c{c}\~{a}o} &
+    \color{white}\textbf{Usada por} \\
+    \midrule
+    \code{0000} & ADD & \code{add, addi, lw, sw, auipc, jalr} \\
+    \code{0001} & SUB & \code{sub, beq, bne} \\
+    \code{0010} & AND & \code{and, andi} \\
+    \code{0011} & OR  & \code{or, ori} \\
+    \code{0100} & XOR & \code{xor, xori} \\
+    \code{0101} & SLL & \code{sll, slli} \\
+    \code{0110} & SRL & \code{srl, srli} \\
+    \code{0111} & LUI & \code{lui} (passa B direto) \\
+    \code{1000} & SLT & compara\c{c}\~{a}o com sinal \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A flag \code{zero\_o} \'{e} ativada quando o resultado \'{e} zero, usada por
+\code{beq} (verifica \code{zero=1}) e \code{bne} (verifica \code{zero=0}).
+
+\subsection{Banco de Registradores (\code{src/regfile/regfile.vhd})}
+
+Armazena os 32 registradores de 32 bits. O registrador \reg{0} \'{e} fixo em zero:
+escritas s\~{a}o ignoradas e leituras sempre retornam \code{0x00000000}. A escrita
+\'{e} s\'{i}ncrona e a leitura \'{e} ass\'{i}ncrona (combinacional), permitindo que WB escreva
+e ID leia no mesmo ciclo.
+
+\subsection{Decodificador (\code{src/control/decoder.vhd})}
+
+Interpreta opcode, \code{funct3} e \code{funct7} para gerar os sinais de controle.
+Suporta os seis formatos RV32I (R, I, S, B, U, J) com extens\~{a}o de sinal do
+imediato para cada formato.
+
+\begin{table}[H]
+  \centering
+  \caption{Sinais de controle gerados pelo decodificador}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Sinal} & \color{white}\textbf{Bits} &
+    \color{white}\textbf{Descri\c{c}\~{a}o} \\
+    \midrule
+    \code{reg\_we}   & 1 & habilita escrita no banco de registradores \\
+    \code{alu\_src}  & 1 & seleciona rs2 (0) ou imediato (1) \\
+    \code{alu\_ctrl} & 4 & seleciona opera\c{c}\~{a}o da ALU \\
+    \code{mem\_we}   & 1 & habilita escrita na mem\'{o}ria (\code{sw}) \\
+    \code{mem\_re}   & 1 & habilita leitura da mem\'{o}ria (\code{lw}) \\
+    \code{wb\_sel}   & 2 & fonte do writeback (ALU / MEM / PC+4) \\
+    \code{branch}    & 1 & indica branch (\code{beq}/\code{bne}) \\
+    \code{jump}      & 1 & indica salto (\code{jal}/\code{jalr}) \\
+    \code{jalr}      & 1 & alvo = rs1+imm em vez de PC+imm \\
+    \code{imm}       & 32 & imediato com extens\~{a}o de sinal \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Registradores de Pipeline}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{IF/ID:} propaga PC e instru\c{c}\~{a}o. Suporta \code{flush}
+    (hazard de controle) e \code{stall} (load-use).
+  \item \textbf{ID/EX:} propaga todos os sinais de controle, operandos, imediato,
+    endere\c{c}os de registradores e PC. Suporta \code{flush}.
+  \item \textbf{EX/MEM:} propaga resultado da ALU, dado de escrita, rd e PC+4.
+  \item \textbf{MEM/WB:} propaga resultado da ALU, dado lido da mem\'{o}ria, rd e
+    PC+4 para writeback.
+\end{itemize}
+
+% ============================================================
+\section{Tratamento de Hazards}
+
+\subsection{Data Hazards --- Forwarding}
+
+A \code{forwarding\_unit} resolve conflitos RAW encaminhando resultados em
+tr\^{a}nsito diretamente para as entradas da ALU:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{EX/MEM $\to$ EX:} resultado da ALU do ciclo anterior encaminhado
+    quando \code{rd\_mem = rs1\_ex} ou \code{rd\_mem = rs2\_ex}.
+  \item \textbf{MEM/WB $\to$ EX:} dado de writeback encaminhado quando
+    \code{rd\_wb = rs1\_ex} ou \code{rd\_wb = rs2\_ex}.
+  \item \textbf{Prioridade:} EX/MEM tem prioridade sobre MEM/WB.
+\end{itemize}
+
+Codifica\c{c}\~{a}o dos muxes: \code{"00"} = sem forwarding, \code{"01"} = MEM/WB,
+\code{"10"} = EX/MEM.
+
+\subsection{Load-Use Hazard --- Stall}
+
+Quando \code{lw} \'{e} seguido imediatamente por instru\c{c}\~{a}o que usa o valor
+carregado, a \code{hazard\_unit} detecta e insere 1 ciclo de stall:
+
+\begin{equation}
+  \text{stall} = \text{mem\_re\_ex} \;\text{AND}\;
+  (\text{rd\_ex} \neq \text{x0}) \;\text{AND}\;
+  (\text{rd\_ex} = \text{rs1\_id} \;\text{OR}\; \text{rd\_ex} = \text{rs2\_id})
+\end{equation}
+
+A unidade mant\'{e}m PC e IF/ID inalterados e insere NOP no ID/EX.
+
+\subsection{Control Hazards --- Flush}
+
+Branches e jumps s\~{a}o resolvidos no est\'{a}gio EX. Quando tomados, o pipeline:
+(1) redireciona o PC para o alvo, e (2) descarta as duas instru\c{c}\~{o}es incorretas
+j\'{a} buscadas (flush do IF/ID e ID/EX). Custo fixo: 2 ciclos por branch tomado.
+
+% ============================================================
+\section{Simula\c{c}\~{a}o e Verifica\c{c}\~{a}o}
+
+\subsection{Testbenches individuais}
+
+\begin{table}[H]
+  \centering
+  \caption{Resultado dos testbenches por m\'{o}dulo}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lcc}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{M\'{o}dulo} & \color{white}\textbf{Casos de teste} &
+    \color{white}\textbf{Resultado} \\
+    \midrule
+    \code{alu}                & 11 & Todos passaram \\
+    \code{regfile}            & 5  & Todos passaram \\
+    \code{decoder}            & 8  & Todos passaram \\
+    \code{cpu\_single\_cycle} & programa 13 instru\c{c}\~{o}es & PC final = 0x44 \\
+    \code{cpu\_pipeline}      & programa 12 instru\c{c}\~{o}es & PC final = 0x5C \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Programa de teste do pipeline}
+
+\begin{lstlisting}[style=vhdlstyle, language={},
+  caption={Programa de teste do pipeline (assembly)}]
+addi x1, x0, 10     -- x1 = 10
+addi x2, x0, 3      -- x2 = 3
+add  x3, x1, x2     -- x3 = 13  (forwarding EX/MEM->EX: x1 disponivel)
+sub  x4, x3, x2     -- x4 = 10  (forwarding EX/MEM->EX: x3 disponivel)
+addi x5, x0, 13     -- x5 = 13
+beq  x3, x5, +12    -- x3==x5? sim (13==13), salta para 0x20
+-- 0x18, 0x1C: SKIPPED (flush por branch tomado)
+addi x7, x0, 42     -- x7 = 42  (alvo do branch)
+jal  x8, +8         -- x8 = 0x28, salta para 0x2C
+-- 0x28: SKIPPED (flush por JAL)
+addi x10, x0, 55    -- x10 = 55 (alvo do JAL)
+
+-- extensao: memoria, lui, jalr, logica e deslocamento
+sw   x3, 0(x0)      -- RAM[0] = 13         (exercita dmem_we)
+lw   x11, 0(x0)     -- x11 = RAM[0] = 13   (exercita dmem_re)
+lui  x12, 0x12345   -- x12 = 0x12345000    (exercita lui)
+addi x16, x0, 0x50  -- x16 = 0x50 (alvo do jalr)
+jalr x13, x16, 0    -- x13 = 0x44, salta para 0x50
+-- 0x44, 0x48: SKIPPED (flush por JALR)
+and  x14, x1, x2    -- x14 = 10 & 3 = 2    (exercita logica)
+sll  x15, x1, x2    -- x15 = 10 << 3 = 80  (exercita deslocamento)
+\end{lstlisting}
+
+\subsection{Sa\'{i}da do GHDL}
+
+\begin{lstlisting}[language={}, basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg}, frame=single, numbers=none]
+$ ghdl -r --std=08 cpu_pipeline_tb 2>&1
+...(report note): CPU pipeline: programa executado com sucesso!
+...(report note): PC final = 0x0000005C
+
+$ ghdl -r --std=08 reset_tb 2>&1
+...(report note): PC=0x00000014
+...(report note): PC apos reset=0x00000004
+\end{lstlisting}
+
+\subsection{Valida\c{c}\~{a}o no Digital}
+
+O circuito foi integrado no simulador Digital utilizando o componente
+\textit{Arquivo externo} com backend GHDL. A estrutura do circuito consiste em:
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Componente \code{top}:} wrapper VHDL que instancia a
+    \code{cpu\_pipeline} e exporta sinais de depura\c{c}\~{a}o adicionais.
+  \item \textbf{ROM (256 palavras $\times$ 32 bits):} carregada com o programa
+    de teste via arquivo \code{program.hex}.
+  \item \textbf{RAM (256 palavras $\times$ 32 bits):} mem\'{o}ria de dados com
+    portas separadas de leitura e escrita.
+  \item \textbf{Distribuidores:} extraem os bits {[}9:2{]} dos endere\c{c}os de
+    32 bits para endere\c{c}ar as mem\'{o}rias por palavra.
+\end{itemize}
+
+Os seguintes sinais de depura\c{c}\~{a}o s\~{a}o vis\'{i}veis durante a simula\c{c}\~{a}o:
+
+\begin{table}[H]
+  \centering
+  \caption{Sinais de depura\c{c}\~{a}o exportados pelo componente \code{top}}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Sinal} & \color{white}\textbf{Bits} &
+    \color{white}\textbf{Descri\c{c}\~{a}o} \\
+    \midrule
+    \code{pc\_debug\_o}    & 32 & PC atual (endere\c{c}o da instru\c{c}\~{a}o em IF) \\
+    \code{instr\_debug\_o} & 32 & Instru\c{c}\~{a}o sendo decodificada \\
+    \code{alu\_debug\_o}   & 32 & Endere\c{c}o de mem\'{o}ria (resultado ALU no MEM) \\
+    \code{stall\_debug\_o} & 1  & Indica stall ativo (PC n\~{a}o avan\c{c}a) \\
+    \code{flush\_debug\_o} & 1  & Indica flush ativo (descarte de instru\c{c}\~{a}o ap\'{o}s desvio tomado) \\
+    \code{imem\_addr\_o}   & 32 & Endere\c{c}o da mem\'{o}ria de instru\c{c}\~{o}es \\
+    \code{dmem\_addr\_o}   & 32 & Endere\c{c}o da mem\'{o}ria de dados \\
+    \code{dmem\_wdata\_o}  & 32 & Dado a escrever na mem\'{o}ria (\code{sw}) \\
+    \code{dmem\_we\_o}     & 1  & Habilita\c{c}\~{a}o de escrita na mem\'{o}ria \\
+    \code{dmem\_re\_o}     & 1  & Habilita\c{c}\~{a}o de leitura da mem\'{o}ria \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A simula\c{c}\~{a}o interativa no Digital confirmou os seguintes comportamentos:
+
+\begin{table}[H]
+  \centering
+  \caption{Resultados da simulação interativa no Digital}
+  \small\rowcolors{2}{rowalt}{white} % 1. Adicionado para alternar as cores
+  \begin{tabularx}{\textwidth}{Xl}   % 2. Removido os @{} das laterais para manter o mesmo recuo da Tabela 5
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Teste} & \color{white}\textbf{Resultado} \\
+    \midrule
+    % 3. Adicionado \rowcolor{white} e removido os @{} do multicolumn
+    \rowcolor{white}\multicolumn{2}{l}{\textit{Fetch e controle de fluxo}} \\
+    PC avança sequencialmente (0x00 $\to$ 0x04 $\to$ 0x08 $\to$ \ldots) & Confirmado \\
+    Branch tomado (\code{beq}): PC busca 0x18 e 0x1C (bolha do pipeline) e 
+      redireciona para 0x20 quando o branch resolve no EX & Confirmado \\
+    Flush do ID/EX no \code{beq}: as instruções buscadas em 0x18/0x1C 
+      são descartadas e nunca aparecem em \code{alu\_debug} & Confirmado \\
+    Salto indireto (\code{jalr}): PC busca 0x44 e 0x48 (bolha do pipeline) e 
+      redireciona para 0x50 quando o jalr resolve no EX & Confirmado \\
+    Flush do ID/EX no \code{jalr}: idem, para o slot de delay do salto & Confirmado \\
+    Decode do \code{jalr}: \code{instr\_debug = 0x000806E7} em \code{pc\_debug = 0x40} & Confirmado \\
+    Leitura da ROM: \code{instr\_debug} mostra instruções corretas & Confirmado \\
+    
+    \rowcolor{white}\multicolumn{2}{l}{\textit{Memória de dados}} \\
+    Escrita (\code{sw}): \code{RAM[0x00] = 0x0000000D} (13) & Confirmado \\
+    Leitura (\code{lw}): \code{x11 = 13} (valor lido de volta) & Inferido\\
+    
+    \rowcolor{white}\multicolumn{2}{l}{\textit{Reset}} \\
+    Reset interativo: PC retorna a 0x00 após pulso de \code{rst\_i} & Confirmado \\
+    \bottomrule
+  \end{tabularx}
+  \footnotetext{A leitura não foi observada diretamente pois o banco de registradores
+  não é exposto como sinal de depuração; a correção é garantida pela
+  combinação da escrita correta em memória (linha acima) com a validação
+  unitária do banco de registradores (Tabela 4, leitura assíncrona/escrita
+  síncrona).}
+\end{table}
+
+\enlargethispage{3cm}
+\vspace{-0.5cm}
+\begin{figure}[H]
+   \centering
+   \includegraphics[width=0.9\textwidth]{Captura de tela de 2026-07-05 00-01-59.png}
+    \caption{Simulação da CPU RV32I no Digital — PC e sinais de depuração}
+    \label{fig:digital}
+\end{figure}
+
+\textbf{Observação sobre o reset no Digital:} o reset síncrono foi
+verificado tanto via testbench GHDL (\code{reset\_tb}, Seção~5.3) quanto
+interativamente no simulador Digital: ao ativar \code{rst\_i} por um
+ciclo durante a simulação em andamento, o PC retorna corretamente a
+\code{0x00} (endereço do vetor de reset), e volta a incrementar
+normalmente a partir daí (\code{0x00} $\to$ \code{0x04} $\to \ldots$)
+assim que \code{rst\_i} é liberado. O valor \code{0x00000004} reportado
+pelo testbench \code{reset\_tb} (Seção~5.3) corresponde a uma amostra do
+PC um ciclo de clock após o término do reset --- ou seja, já incrementado
+a partir de \code{0x00} pelo primeiro fetch pós-reset --- e não ao valor
+imediato assumido pelo PC durante o próprio pulso de reset. Os dois
+resultados são, portanto, consistentes entre si.
+
+\subsection{Bug encontrado e corrigido: flush incompleto do ID/EX}
+
+Durante a valida\c{c}\~{a}o interativa no Digital, observou-se que o sinal
+\code{flush\_debug\_o} nunca era ativado durante um branch tomado, apesar do
+PC ser redirecionado corretamente. Investiga\c{c}\~{a}o do c\'{o}digo-fonte revelou
+dois problemas:
+
+\begin{enumerate}[leftmargin=2em]
+  \item O pino \code{flush\_debug\_o} no wrapper \code{top.vhd} estava
+    conectado a uma heur\'{i}stica derivada de sinais de barramento externos
+    (\code{dmem\_we\_o or dmem\_re\_o}), sem rela\c{c}\~{a}o com o flush real do
+    pipeline.
+  \item Mais grave: o sinal \code{flush\_idex\_s}, que controla o descarte
+    do registrador ID/EX, era acionado apenas pela detec\c{c}\~{a}o de load-use
+    hazard (\code{hazard\_unit}), nunca pelo redirecionamento de PC
+    (\code{pc\_redirect\_s}) causado por um branch tomado ou jump. Isso
+    significava que, embora o registrador IF/ID fosse corretamente
+    limpo, a instru\c{c}\~{a}o do caminho errado que j\'{a} havia avan\c{c}ado para o
+    ID/EX no mesmo ciclo do redirecionamento escapava do descarte e
+    seria executada indevidamente.
+\end{enumerate}
+
+A corre\c{c}\~{a}o consistiu em: (1) exportar sinais de depura\c{c}\~{a}o reais
+diretamente do \code{cpu\_pipeline} (\code{pc\_if\_s}, \code{instr\_id\_s},
+\code{alu\_result\_ex\_s}, \code{stall\_pc\_s}, \code{pc\_redirect\_s}), eliminando
+as heur\'{i}sticas do wrapper;\newpage e (2) alterar a l\'{o}gica de flush do ID/EX para\code{flush\_idex\_s <= flush\_idex\_haz\_s or pc\_redirect\_s}, garantindo o
+descarte tanto em load-use hazard quanto em desvio tomado.
+
+A corre\c{c}\~{a}o foi validada por um teste dirigido: instru\c{c}\~{o}es
+"veneno" (\code{addi} com valores identific\'{a}veis) foram inseridas nos
+slots de atraso do \code{beq} e do \code{jalr}.
+Ap\'{o}s a corre\c{c}\~{a}o,
+\code{alu\_debug\_o} nunca exibiu esses valores em nenhum ciclo, confirmando
+que as instru\c{c}\~{o}es de caminho errado s\~{a}o corretamente descartadas.
+Adicionalmente, os testbenches \code{cpu\_pipeline\_tb} e \code{reset\_tb} do
+GHDL foram reexecutados ap\'{o}s a corre\c{c}\~{a}o (PC final = 0x5C e reset para
+0x04, respectivamente), confirmando aus\^{e}ncia de regress\~{a}o.
+
+% ============================================================
+\section{Extensão Vetorial (Parte 2)}
+
+\subsection{Visão Geral}
+
+A segunda etapa do projeto estende a CPU RV32I da Parte~1 para suportar
+versões vetoriais de oito instruções: \code{add, addi, auipc, sub, sll,
+slli, srl, srli}. A extensão reaproveita o somador vetorial de largura de
+lane configurável (\code{cla4}/\code{vec\_adder}) desenvolvido no projeto
+AC-AVX-Adder, complementado por um novo deslocador vetorial
+(\code{vec\_shifter}) com a mesma filosofia de contenção de lane. Todas
+as 20 instruções escalares da Parte~1 permanecem suportadas sem
+alteração de comportamento.
+
+\subsection{Codificação das Instruções Vetoriais}
+
+As oito instruções vetoriais usam o opcode \code{custom-0}
+(\code{0001011}), reservado pela especificação RISC-V para extensões não
+padronizadas (RISC-V Unprivileged ISA, tabela de opcodes). O campo
+\code{funct3} (\code{instr[14:12]}) seleciona a operação de forma
+uniforme entre os oito casos, incluindo o \code{vauipc}, que no formato
+U-type padrão não possui esse campo --- aqui ele é deliberadamente
+reaproveitado por uniformidade de decodificação, ao custo de parte do
+imediato do \code{vauipc} (ver Tabela~\ref{tab:vecsize-format}).
+
+\begin{table}[H]
+  \centering
+  \caption{Codificação \code{funct3} das instruções vetoriais}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{cllc}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{funct3} & \color{white}\textbf{Instrução} &
+    \color{white}\textbf{Formato} & \color{white}\textbf{alu\_ctrl} \\
+    \midrule
+    \code{000} & \code{vadd}  & R-type-like & \code{0000} \\
+    \code{001} & \code{vaddi} & I-type-like & \code{0000} \\
+    \code{010} & \code{vauipc}& U-type-like & \code{0000} \\
+    \code{011} & \code{vsub}  & R-type-like & \code{0001} \\
+    \code{100} & \code{vsll}  & R-type-like (shamt = rs2[4:0]) & \code{0101} \\
+    \code{101} & \code{vslli} & I-type-like (shamt = imm[4:0]) & \code{0101} \\
+    \code{110} & \code{vsrl}  & R-type-like (shamt = rs2[4:0]) & \code{0110} \\
+    \code{111} & \code{vsrli} & I-type-like (shamt = imm[4:0]) & \code{0110} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Os quatro códigos \code{alu\_ctrl} reaproveitados são exatamente os já
+existentes na ALU escalar da Parte~1 (Tabela~2) --- nenhuma codificação
+nova foi necessária para o controle da ALU, apenas um novo caminho de
+decodificação que chega até eles.
+
+Um campo \code{vecsize} de 2 bits (mesma convenção do \code{vec\_adder}
+do AC-AVX-Adder: \code{00}=lanes de 4~bits, \code{01}=8~bits,
+\code{10}=16~bits, \code{11}=32~bits) é extraído de posições distintas
+conforme o formato:
+
+\begin{table}[H]
+  \centering
+  \caption{Posição do campo \code{vecsize} e do imediato por formato}
+  \label{tab:vecsize-format}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Formato} & \color{white}\textbf{vecsize} &
+    \color{white}\textbf{Imediato} \\
+    \midrule
+    R-type-like (\code{vadd/vsub/vsll/vsrl}) & \code{funct7[1:0]} & --- \\
+    I-type-like aritmética (\code{vaddi}) & \code{imm[11:10]} &
+      \code{imm[9:0]} (10 bits, reduzido de 12) \\
+    I-type-like deslocamento (\code{vslli/vsrli}) & \code{imm[6:5]} &
+      \code{imm[4:0]} (shamt, 5 bits, igual ao escalar) \\
+    U-type-like (\code{vauipc}) & \code{instr[31:30]} &
+      \code{instr[29:15]} (15 bits, reduzido de 20) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Módulos VHDL Novos}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{\code{cla4} (\code{src/vector/cla4.vhd}):} somador/
+    subtrator de 4 bits com lógica de carry-lookahead, reaproveitado do
+    projeto AC-AVX-Adder sem alteração de interface.
+  \item \textbf{\code{vec\_adder} (\code{src/vector/vec\_adder.vhd}):}
+    compõe 8 instâncias de \code{cla4} em uma cadeia de 32 bits,
+    bloqueando a propagação de carry nas fronteiras de lane conforme
+    \code{vecsize\_i}. Recebeu uma porta de depuração nova,
+    \code{cout\_debug\_o}, exportando o carry de cada um dos 8 blocos ---
+    resposta direta ao critério de avaliação do enunciado ("um somador
+    pode exportar seu carry para depuração").
+  \item \textbf{\code{vec\_shifter} (\code{src/vector/vec\_shifter.vhd}):}
+    deslocador de barril (esquerda/direita) implementado por seleção de
+    bit-fonte: para cada bit de saída, calcula-se o bit de entrada
+    correspondente e força-se zero caso a fonte caia fora da lane atual
+    --- mesma filosofia de contenção de lane do \code{vec\_adder}, agora
+    aplicada a bits deslocados em vez de carry.
+  \item \textbf{\code{vec\_alu} (\code{src/vector/vec\_alu.vhd}):}
+    módulo topo que multiplexa entre \code{vec\_adder} (para
+    \code{vadd/vaddi/vauipc/vsub}) e \code{vec\_shifter} (para
+    \code{vsll/vslli/vsrl/vsrli}) com base no mesmo código
+    \code{alu\_ctrl} da ALU escalar.
+\end{itemize}
+
+\subsection{Integração no Pipeline}
+
+O \code{decoder} foi estendido com dois novos sinais de saída,
+\code{is\_vector\_o} e \code{vecsize\_o}, através de um novo ramo no
+\code{case opcode} para \code{custom-0}. O registrador \code{id\_ex\_reg}
+passou a propagar ambos os sinais de ID para EX, com o mesmo
+comportamento de \code{flush} (zeramento) dos demais sinais de controle
+--- garantindo que uma instrução descartada por hazard de controle nunca
+dispare o \code{vec\_alu} indevidamente.
+
+No estágio EX, uma instância de \code{vec\_alu} opera em paralelo à ALU
+escalar, consumindo os mesmos operandos já multiplexados
+(\code{alu\_a\_muxed\_s}/\code{alu\_b\_muxed\_s}), que já contemplam
+forwarding e o caso especial do \code{auipc} (PC como operando A). Um
+novo sinal, \code{alu\_result\_muxed\_s}, seleciona entre o resultado
+escalar e o vetorial conforme \code{is\_vector\_ex\_s}, e é esse sinal
+combinado --- não mais \code{alu\_result\_ex\_s} diretamente --- que
+alimenta o registrador EX/MEM e a saída de depuração
+\code{alu\_debug\_o}. Como o \emph{forwarding} já opera a partir da
+saída do registrador EX/MEM (não da ALU diretamente), a
+\code{forwarding\_unit} e a \code{hazard\_unit} não precisaram de
+nenhuma alteração --- o encaminhamento de resultados vetoriais funciona
+"de graça".
+
+Adicionalmente, o sinal \code{auipc\_id\_s} (que seleciona PC como
+operando A da ALU) precisou ser estendido para também reconhecer o
+\code{vauipc}, já que originalmente comparava apenas contra o opcode
+escalar do \code{auipc}.
+
+\subsection{Bugs Encontrados e Corrigidos Durante a Validação}
+
+A construção do testbench de integração da Parte~2 revelou dois bugs
+pré-existentes, ambos independentes da extensão vetorial em si.
+
+\paragraph{Hazard RAW de distância-3 no banco de registradores.} O
+relatório da Parte~1 já afirmava que "a leitura é assíncrona, permitindo
+que WB escreva e ID leia no mesmo ciclo", mas a implementação não
+cumpria essa promessa: a escrita em \code{regs()} só se tornava visível
+à leitura combinacional um ciclo de clock depois de \code{we\_i}/
+\code{wd\_i} estabilizarem. Isso deslocava a "transparência" de
+distância-3 para distância-4, deixando dependências RAW de distância-3
+sem cobertura --- longe demais para os caminhos de 1 e 2 ciclos da
+\code{forwarding\_unit}, um ciclo cedo demais para a auto-resolução do
+banco de registradores. O bug nunca havia sido detectado porque o
+testbench original da Parte~1 só continha dependências de distância 1 e
+2. Confirmado com um repro escalar isolado (independente de qualquer
+instrução vetorial) e corrigido com um bypass clássico de
+escrita-leitura no mesmo ciclo em \code{regfile.vhd}.
+
+\paragraph{Encadeamento de carry em subtração vetorial multi-bloco.} O
+\code{cla4.vhd} injetava o "+1" do complemento de dois
+incondicionalmente em todo bloco sempre que \code{sub\_i='1'}
+(\code{c(0) <= cin\_i or sub\_i}), em vez de fazê-lo apenas no primeiro
+bloco de uma cadeia. Isso corrompia qualquer subtração vetorial com lane
+maior que 4 bits sempre que o borrow real entre blocos deveria ser zero.
+O bug foi isolado por rastreamento sinal-a-sinal ciclo a ciclo (todos os
+sinais de controle e operandos do \code{vec\_alu} confirmados corretos
+no ciclo da falha), o que restringiu a causa à lógica interna do
+somador. A correção moveu a injeção do "+1" do \code{cla4} (que agora
+apenas honra o \code{cin\_i} recebido, como um somador em cascata
+convencional) para o \code{vec\_adder}, que injeta o "+1" apenas nas
+fronteiras de início de lane, propagando o carry real sem interferência
+dentro de uma lane aberta.
+
+Ambos os bugs foram corrigidos com regressão completa (todos os
+testbenches pré-existentes revalidados) e são detalhados nos commits
+\code{2fcfb7a} e \code{d58572b} do repositório.
+
+\subsection{Simulação e Verificação}
+
+\begin{table}[H]
+  \centering
+  \caption{Resultado dos testbenches da extensão vetorial}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lcc}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Módulo} & \color{white}\textbf{Casos de teste} &
+    \color{white}\textbf{Resultado} \\
+    \midrule
+    \code{cla4}                & 5  & Todos passaram \\
+    \code{vec\_adder}          & 8  & Todos passaram \\
+    \code{vec\_shifter}        & 7  & Todos passaram \\
+    \code{vec\_alu}            & 4  & Todos passaram \\
+    \code{decoder} (casos vetoriais) & 8 & Todos passaram \\
+    \code{cpu\_pipeline\_vector\_tb} & programa de 29 instruções & 10/10 valores corretos \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+O \code{cpu\_pipeline\_vector\_tb} executa um programa misto
+(construção de operandos via instruções escalares já validadas na
+Parte~1, seguidas das 8 instruções vetoriais em múltiplas configurações
+de \code{vecsize}) e verifica os resultados via escrita em memória
+(\code{sw}), incluindo um caso de \emph{overflow} sem vazamento entre
+lanes de 4 bits, um caso de dependência imediata entre duas instruções
+vetoriais (\code{vadd} seguido de \code{vsub}, testando forwarding de
+resultado vetorial) e um contraste entre deslocamento contido em lane e
+deslocamento de largura total.
+
+\subsection{Validação no Digital}
+
+O componente \code{top} do Digital já expunha os cinco sinais de
+depuração da Parte~1; um sexto, \code{vec\_cout\_debug\_o}, foi
+adicionado para o carry vetorial. Como o mecanismo de build do Digital
+(compilação sob demanda contra uma biblioteca de trabalho do GHDL, não
+mais o arquivo único \code{cpu\_pipeline\_full.vhd} usado inicialmente
+na Parte~1) não possuía um processo documentado e reproduzível, foi
+criado \code{digital/build.sh}, testado com sucesso a partir de uma
+biblioteca de trabalho vazia.
+
+O mesmo programa de 29 instruções do testbench de GHDL foi carregado na
+ROM (\code{digital/program\_vector.hex}) e executado interativamente no
+Digital. Os 10 resultados na RAM conferem exatamente com os obtidos via
+GHDL:
+
+\begin{table}[H]
+  \centering
+  \caption{Resultados do programa vetorial confirmados na RAM (Digital)}
+  \small\rowcolors{2}{rowalt}{white}
+  \begin{tabular}{lll}
+    \toprule
+    \rowcolor{headerblue}
+    \color{white}\textbf{Instrução} & \color{white}\textbf{Endereço RAM} &
+    \color{white}\textbf{Valor} \\
+    \midrule
+    \code{vadd} (4b, overflow)      & 0x00 & 0x00000000 \\
+    \code{vsub} (8b)                & 0x04 & 0x02020202 \\
+    \code{vsub} (32b, forwarding)   & 0x08 & 0xFFFFFFFF \\
+    \code{vslli} (4b, contido)      & 0x0C & 0x00000000 \\
+    \code{vslli} (32b)              & 0x10 & 0x11111110 \\
+    \code{vsll} (8b, reg-reg)       & 0x14 & 0x44444444 \\
+    \code{vsrl} (8b, reg-reg)       & 0x18 & 0x04040404 \\
+    \code{vauipc}                   & 0x1C & 0x0000105C \\
+    \code{vsrli} (4b, contido)      & 0x20 & 0x00000000 \\
+    \code{vaddi} (8b)               & 0x24 & 0x11111175 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Os endereços \code{0x00} e \code{0x08} correspondem exatamente às
+instruções que expuseram os dois bugs corrigidos na Seção~6.5, servindo
+como confirmação visual das correções fora do ambiente de simulação de
+linha de comando.
+
+\subsection{Premissas e Decisões de Projeto da Extensão Vetorial}
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Opcode \code{custom-0}.} Escolhido por ser explicitamente
+    reservado pela especificação RISC-V para extensões não padronizadas,
+    sem conflito com nenhum opcode escalar da Parte~1.
+
+  \item \textbf{Reaproveitamento da convenção \code{vecsize} do
+    AC-AVX-Adder.} Os mesmos quatro valores (4/8/16/32 bits) usados no
+    somador vetorial da atividade AVX foram adotados aqui, mantendo
+    consistência entre os dois projetos.
+
+  \item \textbf{\code{funct3} uniforme mesmo para \code{vauipc}.} O
+    formato U-type padrão não possui campo \code{funct3}; reaproveitar
+    essa posição de bits para o \code{vauipc} mantém a lógica de
+    decodificação uniforme entre os oito casos, ao custo de reduzir o
+    imediato do \code{vauipc} de 20 para 15 bits.
+
+  \item \textbf{Imediatos reduzidos.} \code{vaddi} tem imediato de 10
+    bits (vs. 12 no \code{addi} escalar) e \code{vauipc} de 15 bits (vs.
+    20 no \code{auipc} escalar), ambos para acomodar o campo
+    \code{vecsize}. Adequado ao escopo de um programa de teste da
+    disciplina.
+
+  \item \textbf{Semântica do \code{vauipc}.} Como PC é um valor escalar
+    único, "vetorizar" \code{auipc} não tem significado físico pleno
+    para lanes menores que 32 bits. A implementação roteia PC e o
+    imediato pelo mesmo \code{vec\_adder} usado por \code{vadd}/
+    \code{vsub}, com \code{vecsize} controlando apenas onde o carry é
+    quebrado --- funcionalmente consistente com a categoria aritmética,
+    mesmo que o resultado com lanes $<$32 bits não tenha uso prático
+    como endereço.
+
+  \item \textbf{Reaproveitamento dos códigos \code{alu\_ctrl}.} Nenhuma
+    codificação de controle de ALU nova foi criada; o \code{vec\_alu}
+    usa exatamente os mesmos quatro códigos já existentes na ALU
+    escalar da Parte~1, simplificando a integração no decoder.
+\end{enumerate}
+
+% ============================================================
+\section{Premissas e Decis\~{o}es de Projeto}
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Branch resolvido no est\'{a}gio EX.} Reutiliza a ALU (subtra\c{c}\~{a}o
+    + flag zero) sem hardware adicional, ao custo de 2 ciclos por branch tomado.
+
+  \item \textbf{Forwarding cobre todos os casos exceto load-use.} EX/MEM$\to$EX
+    e MEM/WB$\to$EX cobrem depend\^{e}ncias RAW de 1 e 2 ciclos. Load-use exige
+    1 stall obrigat\'{o}rio.
+
+  \item \textbf{Mem\'{o}rias separadas (Harvard).} Conforme o enunciado, mem\'{o}rias
+    de instru\c{c}\~{a}o e dados distintas, cada uma entregando uma palavra por ciclo.
+
+  \item \textbf{Reset s\'{i}ncrono.} Todos os registradores e o PC respondem ao
+    \code{rst\_i} na borda de subida, garantindo inicializa\c{c}\~{a}o determin\'{i}stica.
+
+  \item \textbf{Estados internos exportados.} Sinais internos relevantes (flags
+    zero, sinais de forwarding, stall) s\~{a}o expostos como portas para depura\c{c}\~{a}o
+    no Digital, conforme exigido pelo enunciado.
+
+  \item \textbf{AUIPC via mux no operando A.} Quando opcode = \code{0010111},
+    o operando A da ALU \'{e} PC em vez de rs1, calculando PC + imm sem
+    hardware adicional.
+
+  \item \textbf{Espa\c{c}o de endere\c{c}amento limitado a 256 palavras.} ROM e RAM
+    s\~{a}o endere\c{c}adas pelos bits [9:2] do barramento de 32 bits (descartando
+    os 2 LSBs, por alinhamento de palavra, e os bits superiores, fixados em
+    zero), resultando em 1KB de espa\c{c}o endere\c{c}\'{a}vel para cada mem\'{o}ria. Essa
+    simplifica\c{c}\~{a}o \'{e} adequada ao escopo de um programa de teste da
+    disciplina e n\~{a}o compromete a arquitetura da CPU, que opera sobre o
+    barramento de endere\c{c}o completo de 32 bits.
+
+  \item \textbf{CPU inativa durante carga de dados.} Como todos os elementos
+    de estado da CPU (PC e registradores de pipeline) s\~{a}o atualizados
+    exclusivamente na borda de subida de \code{clk\_i}, e a carga do programa
+    na ROM/RAM ocorre de forma ass\'{i}ncrona pela interface do Digital sem
+    gera\c{c}\~{a}o de pulsos de clock, o estado interno da CPU permanece
+    inalterado durante o carregamento de dados, atendendo ao requisito do
+    enunciado sem necessidade de l\'{o}gica adicional.
+\end{enumerate}
+
+% ============================================================
+\section{Conclus\~{a}o}
+
+O projeto resultou em uma CPU RV32I funcional com pipeline de 5 est\'{a}gios,
+implementando as instru\c{c}\~{o}es obrigat\'{o}rias. A valida\c{c}\~{a}o em GHDL confirmou
+o funcionamento correto do forwarding, detec\c{c}\~{a}o de load-use e flush de
+control hazards. O PC final de 0x5C no testbench do pipeline confirma que
+branches tomados e JAL foram executados corretamente com descarte das
+instru\c{c}\~{o}es incorretas.
+
+O c\'{o}digo-fonte est\'{a} dispon\'{i}vel em
+\url{https://github.com/LuizCavalini/AC-CPU-RV32I}.
+
+\newpage
+% ============================================================
+\section{Refer\^{e}ncias}
+
+\begin{enumerate}[leftmargin=2em]
+  \item Patterson, D. A. \& Hennessy, J. L. \textit{Computer Organization and
+    Design: RISC-V Edition}, 2\textordfeminine~ed., Elsevier, 2021. Cap\'{i}tulos 4 e 5.
+
+  \item RISC-V International. \textit{The RISC-V Instruction Set Manual,
+    Volume I: Unprivileged ISA}, vers\~{a}o 20191213.
+    \url{https://riscv.org/technical/specifications/}
+
+  \item Neemann, H. \textit{Digital --- Logic Designer and Circuit Simulator}.
+    \url{https://github.com/hneemann/Digital}
+
+  \item Pedroni, V. A. \textit{Circuit Design and Simulation with VHDL},
+    2\textordfeminine~ed., MIT Press, 2010.
+\end{enumerate}
+
+\end{document}
