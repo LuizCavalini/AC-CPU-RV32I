@@ -546,7 +546,50 @@ Adicionalmente, os testbenches \code{cpu\_pipeline\_tb} e \code{reset\_tb} do
 GHDL foram reexecutados após a correção (PC final = 0x5C e reset para
 0x04, respectivamente), confirmando ausência de regressão.
 
+
+\section{Premissas e Decisões de Projeto (Parte 1)}
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Branch resolvido no estágio EX.} Reutiliza a ALU (subtração
+    + flag zero) sem hardware adicional, ao custo de 2 ciclos por branch tomado.
+
+  \item \textbf{Forwarding cobre todos os casos exceto load-use.} EX/MEM$\to$EX
+    e MEM/WB$\to$EX cobrem dependências RAW de 1 e 2 ciclos. Load-use exige
+    1 stall obrigatório.
+
+  \item \textbf{Memórias separadas (Harvard).} Conforme o enunciado, memórias
+    de instrução e dados distintas, cada uma entregando uma palavra por ciclo.
+
+  \item \textbf{Reset síncrono.} Todos os registradores e o PC respondem ao
+    \code{rst\_i} na borda de subida, garantindo inicialização determinística.
+
+  \item \textbf{Estados internos exportados.} Sinais internos relevantes (flags
+    zero, sinais de forwarding, stall) são expostos como portas para depuração
+    no Digital, conforme exigido pelo enunciado.
+
+  \item \textbf{AUIPC via mux no operando A.} Quando opcode = \code{0010111},
+    o operando A da ALU é PC em vez de rs1, calculando PC + imm sem
+    hardware adicional.
+
+  \item \textbf{Espaço de endereçamento limitado a 256 palavras.} ROM e RAM
+    são endereçadas pelos bits [9:2] do barramento de 32 bits (descartando
+    os 2 LSBs, por alinhamento de palavra, e os bits superiores, fixados em
+    zero), resultando em 1KB de espaço endereçável para cada memória. Essa
+    simplificação é adequada ao escopo de um programa de teste da
+    disciplina e não compromete a arquitetura da CPU, que opera sobre o
+    barramento de endereço completo de 32 bits.
+
+  \item \textbf{CPU inativa durante carga de dados.} Como todos os elementos
+    de estado da CPU (PC e registradores de pipeline) são atualizados
+    exclusivamente na borda de subida de \code{clk\_i}, e a carga do programa
+    na ROM/RAM ocorre de forma assíncrona pela interface do Digital sem
+    geração de pulsos de clock, o estado interno da CPU permanece
+    inalterado durante o carregamento de dados, atendendo ao requisito do
+    enunciado sem necessidade de lógica adicional.
+\end{enumerate}
+
 % ============================================================
+
 \section{Extensão Vetorial (Parte 2)}
 
 \subsection{Visão Geral}
@@ -840,48 +883,6 @@ linha de comando.
     codificação de controle de ALU nova foi criada; o \code{vec\_alu}
     usa exatamente os mesmos quatro códigos já existentes na ALU
     escalar da Parte~1, simplificando a integração no decoder.
-\end{enumerate}
-
-% ============================================================
-\section{Premissas e Decisões de Projeto (Parte 1)}
-
-\begin{enumerate}[leftmargin=2em]
-  \item \textbf{Branch resolvido no estágio EX.} Reutiliza a ALU (subtração
-    + flag zero) sem hardware adicional, ao custo de 2 ciclos por branch tomado.
-
-  \item \textbf{Forwarding cobre todos os casos exceto load-use.} EX/MEM$\to$EX
-    e MEM/WB$\to$EX cobrem dependências RAW de 1 e 2 ciclos. Load-use exige
-    1 stall obrigatório.
-
-  \item \textbf{Memórias separadas (Harvard).} Conforme o enunciado, memórias
-    de instrução e dados distintas, cada uma entregando uma palavra por ciclo.
-
-  \item \textbf{Reset síncrono.} Todos os registradores e o PC respondem ao
-    \code{rst\_i} na borda de subida, garantindo inicialização determinística.
-
-  \item \textbf{Estados internos exportados.} Sinais internos relevantes (flags
-    zero, sinais de forwarding, stall) são expostos como portas para depuração
-    no Digital, conforme exigido pelo enunciado.
-
-  \item \textbf{AUIPC via mux no operando A.} Quando opcode = \code{0010111},
-    o operando A da ALU é PC em vez de rs1, calculando PC + imm sem
-    hardware adicional.
-
-  \item \textbf{Espaço de endereçamento limitado a 256 palavras.} ROM e RAM
-    são endereçadas pelos bits [9:2] do barramento de 32 bits (descartando
-    os 2 LSBs, por alinhamento de palavra, e os bits superiores, fixados em
-    zero), resultando em 1KB de espaço endereçável para cada memória. Essa
-    simplificação é adequada ao escopo de um programa de teste da
-    disciplina e não compromete a arquitetura da CPU, que opera sobre o
-    barramento de endereço completo de 32 bits.
-
-  \item \textbf{CPU inativa durante carga de dados.} Como todos os elementos
-    de estado da CPU (PC e registradores de pipeline) são atualizados
-    exclusivamente na borda de subida de \code{clk\_i}, e a carga do programa
-    na ROM/RAM ocorre de forma assíncrona pela interface do Digital sem
-    geração de pulsos de clock, o estado interno da CPU permanece
-    inalterado durante o carregamento de dados, atendendo ao requisito do
-    enunciado sem necessidade de lógica adicional.
 \end{enumerate}
 
 % ============================================================
