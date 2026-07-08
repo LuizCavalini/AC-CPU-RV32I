@@ -474,7 +474,7 @@ A simulação interativa no Digital confirmou os seguintes comportamentos:
      
     \rowcolor{white}\multicolumn{2}{l}{\textit{Memória de dados}} \\
     Escrita (\code{sw}): \code{RAM[0x00] = 0x0000000D} (13) & Confirmado \\
-    Leitura (\code{lw}): \code{x11 = 13} (valor lido de volta) & Inferido\\
+    Leitura (\code{lw}): \code{x11 = 13} (valor lido de volta) & Inferido\footnotemark\\
      
     \rowcolor{white}\multicolumn{2}{l}{\textit{Reset}} \\
     Reset interativo: PC retorna a 0x00 após pulso de \code{rst\_i} & Confirmado \\
@@ -843,7 +843,7 @@ linha de comando.
 \end{enumerate}
 
 % ============================================================
-\section{Premissas e Decisões de Projeto}
+\section{Premissas e Decisões de Projeto (Parte 1)}
 
 \begin{enumerate}[leftmargin=2em]
   \item \textbf{Branch resolvido no estágio EX.} Reutiliza a ALU (subtração
@@ -893,6 +893,17 @@ o funcionamento correto do forwarding, detecção de load-use e flush de
 control hazards. O PC final de 0x5C no testbench do pipeline confirma que
 branches tomados e JAL foram executados corretamente com descarte das
 instruções incorretas.
+
+A extensão vetorial (Parte 2) adicionou oito instruções customizadas
+via opcode \code{custom-0}, reaproveitando o somador vetorial do
+projeto AC-AVX-Adder e um novo deslocador de barril com a mesma
+filosofia de contenção de lane. A integração revelou e corrigiu dois
+bugs pré-existentes --- um hazard RAW de distância-3 no banco de
+registradores e um erro de encadeamento de carry em subtrações
+vetoriais multi-bloco --- ambos validados com regressão completa. As 8
+instruções vetoriais foram confirmadas corretas tanto via GHDL (10/10
+casos) quanto interativamente no Digital (10/10 valores na RAM),
+incluindo os dois casos que expuseram os bugs corrigidos.
 
 O código-fonte está disponível em
 \url{https://github.com/LuizCavalini/AC-CPU-RV32I}.
