@@ -177,7 +177,10 @@ begin
   rs2_id_s    <= instr_id_s(24 downto 20);
   rd_id_s     <= instr_id_s(11 downto  7);
   funct3_id_s <= instr_id_s(14 downto 12);
-  auipc_id_s  <= '1' when instr_id_s(6 downto 0) = "0010111" else '0';
+  auipc_id_s  <= '1' when instr_id_s(6 downto 0) = "0010111" or
+                          (instr_id_s(6 downto 0) = "0001011" and
+                           instr_id_s(14 downto 12) = "010")
+                     else '0';
 
   dec: entity work.decoder
     port map(
