@@ -73,6 +73,11 @@ architecture sim of cpu_pipeline_vector_tb is
     25 => x"0041780B",
     -- 0x68: sw   x16,32(x0)
     26 => x"03002023",
+    -- 0x6C: vaddi x17,x2,100,vs=01 -> x17 = 0x11111175 (x2=0x11111111, soma
+    --       100 no byte baixo, sem propagar carry entre lanes de 8 bits)
+    27 => x"4641188B",
+    -- 0x70: sw   x17,36(x0)
+    28 => x"03102223",
     -- remaining: NOP
     others => "00000000000000000000000000010011"
   );
@@ -124,11 +129,11 @@ begin
     wait until rising_edge(clk);
     rst <= '0';
 
-    -- Run 60 cycles (generous margin over the 27-instruction count,
+    -- Run 70 cycles (generous margin over the 29-instruction count,
     -- no stalls expected: no lw is used, so no load-use hazard; the
     -- only data dependency, word 11->12, is covered by EX/MEM->EX
     -- forwarding, already validated structurally)
-    for i in 0 to 59 loop
+    for i in 0 to 69 loop
       wait until rising_edge(clk);
     end loop;
 
@@ -211,6 +216,15 @@ begin
       severity error;
     if dmem(8) = x"00000000" then
       report "OK: dmem[8] vsrli 4b lanes, contido" severity note;
+    end if;
+
+    assert dmem(9) = x"11111175"
+      report "FALHOU: dmem[9] vaddi 8b lanes, imediato" &
+             " esperado=" & to_hstring(std_logic_vector'(x"11111175")) &
+             " obtido="   & to_hstring(dmem(9))
+      severity error;
+    if dmem(9) = x"11111175" then
+      report "OK: dmem[9] vaddi 8b lanes, imediato" severity note;
     end if;
 
     report "Testes do cpu_pipeline_vector_tb concluidos" severity note;
