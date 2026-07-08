@@ -19,7 +19,8 @@ entity top is
     instr_debug_o   : out std_logic_vector(31 downto 0);
     alu_debug_o     : out std_logic_vector(31 downto 0);
     stall_debug_o   : out std_logic;
-    flush_debug_o   : out std_logic
+    flush_debug_o   : out std_logic;
+    vec_cout_debug_o : out std_logic_vector(7 downto 0)
   );
 end entity top;
 
@@ -51,7 +52,8 @@ begin
       instr_debug_o => instr_debug_o,
       alu_debug_o   => alu_debug_o,
       stall_debug_o => stall_debug_o,
-      flush_debug_o => flush_debug_o
+      flush_debug_o => flush_debug_o,
+      vec_cout_debug_o => vec_cout_debug_o
     );
 
   -- Pass through memory signals
